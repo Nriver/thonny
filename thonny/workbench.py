@@ -2460,7 +2460,7 @@ class Workbench(tk.Tk):
         if self._is_portable:
             title_text = "Portable Thonny"
         else:
-            title_text = "Thonny"
+            title_text = "Thonny 魔改版"
         if editor is not None:
             title_text += "  -  " + editor.get_long_description()
 
