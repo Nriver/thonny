@@ -12,7 +12,7 @@ import tkinter.font
 import traceback
 from logging import getLogger
 from tkinter import filedialog, messagebox, ttk
-from typing import Callable, List, Optional, Tuple, Union  # @UnusedImport
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union  # @UnusedImport
 
 from _tkinter import TclError
 
@@ -535,7 +535,7 @@ class ClosableNotebook(ttk.Notebook):
         self.close_tab(self._popup_index)
 
     def _close_other_tabs(self):
-        self.close_tabs(self._popup_index)
+        self.close_tabs(except_index=self._popup_index)
 
     def close_tabs(self, except_index=None):
         for tab_index in reversed(range(len(self.winfo_children()))):
@@ -1792,6 +1792,7 @@ class ChoiceDialog(CommonDialogEx):
         choices=[],
         initial_choice_index=None,
     ) -> None:
+        self.result = None
         super().__init__(master=master)
 
         self.title(title)
@@ -2436,6 +2437,66 @@ def windows_known_extensions_are_hidden() -> bool:
         return winreg.QueryValueEx(reg_key, "HideFileExt")[0] == 1
     finally:
         reg_key.Close()
+
+
+class MappingCombobox(ttk.Combobox):
+    def __init__(self, master, mapping=None, **kw):
+        super().__init__(master, **kw)
+
+        if mapping is None:
+            mapping = {}
+
+        self.mapping: Dict[str, Any]
+        self.set_mapping(mapping)
+        self.mapping_desc_variable = tk.StringVar(value="")
+        self.configure(textvariable=self.mapping_desc_variable)
+
+        self.state(["!disabled", "readonly"])
+
+    def set_mapping(self, mapping: Dict[str, Any]):
+        self.mapping = mapping
+        self["values"] = list(mapping)
+
+    def get_selected_value(self) -> Any:
+        desc = self.mapping_desc_variable.get()
+        return self.mapping.get(desc, None)
+
+    def select_value(self, value) -> None:
+        for desc in self.mapping:
+            if self.mapping[desc] == value:
+                self.set(desc)
+
+    def select_none(self) -> None:
+        self.mapping_desc_variable.set("")
+
+
+class AdvancedLabel(ttk.Label):
+    def __init__(self, master, **kw):
+        self._default_font = tkinter.font.nametofont("TkDefaultFont")
+        self._url_font = self._default_font.copy()
+        self._url_font.configure(underline=1)
+        self._url = None
+        super().__init__(master, **kw)
+        self.bind("<Button-1>", self._on_click, True)
+
+    def set_url(self, url: Optional[str]) -> None:
+        if self._url == url:
+            return
+
+        self._url = url
+        if url:
+            self.configure(style="Url.TLabel", cursor=get_hyperlink_cursor(), font=self._url_font)
+        else:
+            self.configure(style="TLabel", cursor="", font=self._default_font)
+
+    def get_url(self) -> Optional[str]:
+        return self._url
+
+    def _on_click(self, *event):
+        if self._url:
+            import webbrowser
+
+            webbrowser.open(self._url)
 
 
 if __name__ == "__main__":

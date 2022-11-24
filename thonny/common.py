@@ -215,13 +215,13 @@ class BackendEvent(MessageFromBackend):
         self.event_type = event_type
 
 
-class UserSystemExit(BackendEvent):
-    def __init__(self, returncode: int):
-        self.returncode = returncode
-        super().__init__("UserSystemExit")
+class OscEvent(BackendEvent):
+    def __init__(self, text: str):
+        self.text = text
+        super().__init__("OscEvent")
 
     def __repr__(self):
-        return f"UserSystemExit({self.returncode})"
+        return f"OscEvent({self.text!r})"
 
 
 class InlineResponse(MessageFromBackend):

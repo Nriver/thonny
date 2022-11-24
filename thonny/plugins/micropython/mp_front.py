@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from thonny import get_runner, get_shell, get_workbench, running, ui_utils
 from thonny.common import CommandToBackend, EOFCommand, ImmediateCommand, InlineCommand
 from thonny.languages import tr
+from thonny.misc_utils import list_volumes
 from thonny.plugins.backend_config_page import (
     BackendDetailsConfigPage,
     BaseSshProxyConfigPage,
@@ -22,8 +23,6 @@ logger = getLogger(__name__)
 
 DEFAULT_WEBREPL_URL = "ws://192.168.4.1:8266/"
 WEBREPL_PORT_VALUE = "webrepl"
-BOOTLOADER_PORT_VALUE = "bootloader"
-
 VIDS_PIDS_TO_AVOID_IN_GENERIC_BACKEND = set()
 
 
@@ -117,10 +116,6 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
             if len(potential) == 1:
                 self._port = potential[0][0]
             else:
-                if not potential and self.device_is_present_in_bootloader_mode():
-                    if self._propose_install_python():
-                        return self._fix_port()
-
                 self._port = None
                 message = dedent(
                     """\
@@ -135,20 +130,6 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
                     message += "\n\nLikely candidates are:\n * " + "\n * ".join(descriptions)
 
                 self._show_error(message)
-        elif not port_exists(self._port):
-            if self.device_is_present_in_bootloader_mode():
-                self._port = None
-                self._propose_install_python()
-
-    def _propose_install_python(self):
-        """Subclass may show python installation dialog and return True if installation succeeds"""
-        self._show_error(
-            "Your device seems to be in bootloader mode.\n"
-            "In this mode you can install or upgrade MicroPython python.\n\n"
-            "If your device already has MicroPython, then you can start using it after you put it into normal mode."
-        )
-
-        return False
 
     def _start_background_process(self, clean=None, extra_args=[]):
         if self._port is None:
@@ -185,6 +166,9 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
 
     def should_restart_interpreter_before_run(self):
         return get_workbench().get_option(self.backend_name + ".restart_interpreter_before_run")
+
+    def stop_restart_kills_user_program(self) -> bool:
+        return False
 
     def _get_backend_launcher_path(self) -> str:
         import thonny.plugins.micropython.bare_metal_backend
@@ -337,10 +321,6 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
     def can_run_remote_files(self):
         return False
 
-    @classmethod
-    def device_is_present_in_bootloader_mode(cls):
-        return False
-
     def _check_remember_current_configuration(self) -> None:
         super()._check_remember_current_configuration()
 
@@ -374,8 +354,6 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
         if port == WEBREPL_PORT_VALUE:
             url = conf[f"{cls.backend_name}.webrepl_url"]
             return f"{cls.backend_description}  •  {url}"
-        elif port == BOOTLOADER_PORT_VALUE:
-            return f"{cls.backend_description}  •  BOOTLOADER"
         else:
             return f"{cls.backend_description}  •  {port}"
 
@@ -401,14 +379,6 @@ class BareMetalMicroPythonProxy(MicroPythonProxy):
             conf = {"run.backend_name": cls.backend_name, f"{cls.backend_name}.port": device}
             if conf not in relevant_confs:
                 relevant_confs.append(conf)
-
-        if cls.device_is_present_in_bootloader_mode():
-            relevant_confs.append(
-                {
-                    "run.backend_name": cls.backend_name,
-                    f"{cls.backend_name}.port": BOOTLOADER_PORT_VALUE,
-                }
-            )
 
         sorted_confs = sorted(relevant_confs, key=cls.get_switcher_configuration_label)
         return [(conf, cls.get_switcher_configuration_label(conf)) for conf in sorted_confs]
@@ -460,13 +430,15 @@ class BareMetalMicroPythonConfigPage(BackendDetailsConfigPage):
 
         self._has_opened_python_flasher = False
 
-        intro_label = ttk.Label(self, text=self._get_intro_text())
-        intro_label.grid(row=0, column=0, sticky="nw")
+        intro_text = self._get_intro_text()
+        if intro_text:
+            intro_label = ttk.Label(self, text=intro_text)
+            intro_label.grid(row=0, column=0, sticky="nw")
 
-        driver_url = self._get_usb_driver_url()
-        if driver_url:
-            driver_url_label = create_url_label(self, driver_url)
-            driver_url_label.grid(row=1, column=0, sticky="nw")
+        intro_url = self._get_intro_url()
+        if intro_url:
+            intro_url_label = create_url_label(self, intro_url)
+            intro_url_label.grid(row=1, column=0, sticky="nw")
 
         port_label = ttk.Label(
             self, text=tr("Port or WebREPL") if self.allow_webrepl else tr("Port")
@@ -521,17 +493,18 @@ class BareMetalMicroPythonConfigPage(BackendDetailsConfigPage):
             pady=(ems_to_pixels(2.0), 0),
         )
 
-        self.add_checkbox(
-            self.backend_name + ".sync_time",
-            row=11,
-            description=tr("Synchronize device's real time clock"),
-        )
+        if self.may_have_rtc():
+            self.add_checkbox(
+                self.backend_name + ".sync_time",
+                row=11,
+                description=tr("Synchronize device's real time clock"),
+            )
 
-        self.add_checkbox(
-            self.backend_name + ".local_rtc",
-            row=12,
-            description=tr("Use local time in real time clock"),
-        )
+            self.add_checkbox(
+                self.backend_name + ".local_rtc",
+                row=12,
+                description=tr("Use local time in real time clock"),
+            )
 
         self.add_checkbox(
             self.backend_name + ".restart_interpreter_before_run",
@@ -671,7 +644,10 @@ class BareMetalMicroPythonConfigPage(BackendDetailsConfigPage):
             if self._webrepl_frame and self._webrepl_frame.winfo_ismapped():
                 self._webrepl_frame.grid_forget()
 
-    def _get_usb_driver_url(self) -> Optional[str]:
+    def may_have_rtc(self):
+        return True
+
+    def _get_intro_url(self) -> Optional[str]:
         return None
 
     def _has_flashing_dialog(self):
@@ -1044,9 +1020,12 @@ def list_serial_ports_with_descriptions():
 def get_uart_adapter_vids_pids():
     # https://github.com/per1234/zzInoVIDPID
     # https://github.com/per1234/zzInoVIDPID/blob/master/zzInoVIDPID/boards.txt
+    # http://esp32.net/usb-uart/
+    # https://www.usb.org/developers
     return {
         (0x1A86, 0x7523),  # CH340 (HL-340?)
         (0x1A86, 0x5523),  # CH341
+        (0x1A86, 0x55D4),  # CH9102F, seen at Adafruit Feather ESP32 V2
         (0x10C4, 0xEA60),  # CP210x,
         (0x0403, 0x6001),  # FT232/FT245 (XinaBox CW01, CW02)
         (0x0403, 0x6010),  # FT2232C/D/L/HL/Q (ESP-WROVER-KIT)
@@ -1054,6 +1033,7 @@ def get_uart_adapter_vids_pids():
         (0x0403, 0x6014),  # FT232H
         (0x0403, 0x6015),  # FT X-Series (Sparkfun ESP32)
         (0x0403, 0x601C),  # FT4222H
+        (0x303A, 0x1001),  # Espressif's built-in USB-to-Serial, seen at QtPy C3
     }
 
 

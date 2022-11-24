@@ -21,6 +21,7 @@ Several companies and organizations have provided us with free hardware for test
 * M5Stack (https://m5stack.com/)
 * Micro:bit educational foundation (https://microbit.org/)
 * Calliope (https://calliope.cc/en)
+* @bwshockley (https://minifigboards.com/)
 
 Python
 ------
@@ -56,6 +57,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Anders Pamdal
 * Andrew Scheller
 * André Roberge
+* Andy Piper
 * Ankith
 * Antonio Carlos
 * atesin
@@ -116,6 +118,7 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * Nicolas Despres
 * Pavel Minaev
 * Peter Marshall
+* Peter Mawhorter (@solsword)
 * Petr. moses
 * Phil Duby
 * phr0gger
@@ -133,12 +136,14 @@ Source contributors, sponsors, advisors, translators and frequent bug-reporters
 * sourceperl
 * speedy-10
 * Stefan Rothe
+* Stewart Russell (@scruss)
 * Suk-Hyung Hwang
 * Sven Duzont
 * Syed Nasim
 * Taavi Ilp
 * tabreturn
 * TANAKA Masayuki
+* Thomas Helmuth
 * TooLazy0x00
 * Toomas Mölder
 * Tristan Bunn

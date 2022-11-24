@@ -1,6 +1,7 @@
 import os.path
 import subprocess
 import sys
+import textwrap
 import tkinter as tk
 from logging import getLogger
 from tkinter import messagebox, ttk
@@ -29,6 +30,7 @@ logger = getLogger(__name__)
 
 class LocalCPythonProxy(SubprocessProxy):
     def __init__(self, clean: bool) -> None:
+        logger.info("Creating LocalCPythonProxy")
         executable = get_workbench().get_option("LocalCPython.executable")
         self._expecting_response_for_gui_update = False
         super().__init__(clean, executable)
@@ -70,7 +72,7 @@ class LocalCPythonProxy(SubprocessProxy):
         Each ToplevelResponse is supposed to tell, whether gui is active
         and needs updating.
         """
-        if not "gui_is_active" in msg:
+        if "gui_is_active" not in msg:
             return
 
         if msg["gui_is_active"] and self._gui_update_loop_id is None:
@@ -234,6 +236,17 @@ class LocalCPythonConfigurationPage(BackendDetailsConfigPage):
             )
         extra_label = ttk.Label(self, text=extra_text)
         extra_label.grid(row=2, column=1, columnspan=2, pady=10, sticky="w")
+
+        venv_text = tr(
+            "You can activate an existing virtual environment also"
+            + " via the right-click context menu in the file navagation"
+            + " when selecting a virtual environment folder,"
+            + " or the 'pyveng.cfg' file inside."
+        )
+        venv_text = "\n".join(textwrap.wrap(venv_text, 80))
+
+        venv_label = ttk.Label(self, text=venv_text)
+        venv_label.grid(row=3, column=1, columnspan=2, pady=10, sticky="w")
 
         last_row = ttk.Frame(self)
         last_row.grid(row=100, sticky="swe", column=1, columnspan=2)

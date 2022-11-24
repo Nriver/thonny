@@ -1,14 +1,17 @@
+import logging
+import os.path
+import sys
+import time
 from logging import getLogger
+from typing import TYPE_CHECKING, List, Optional, cast
 
 from thonny.common import is_private_python, is_virtual_executable
 
 _last_module_count = 0
 _last_modules = set()
-import time
 
 _last_time = time.time()
 
-import sys
 
 logger = getLogger(__name__)
 
@@ -43,9 +46,6 @@ def report_time(label: str) -> None:
 
 report_time("After defining report_time")
 
-import logging
-import os.path
-from typing import TYPE_CHECKING, List, Optional, cast
 
 SINGLE_INSTANCE_DEFAULT = True
 BACKEND_LOG_MARKER = "Thonny's backend.log"
@@ -143,11 +143,18 @@ def is_portable():
         return abs_location.startswith("/media/") or abs_location.startswith("/mnt/")
 
 
+_THONNY_VERSION = None
+
+
 def get_version():
+    global _THONNY_VERSION
+    if _THONNY_VERSION:
+        return _THONNY_VERSION
     try:
         package_dir = os.path.dirname(sys.modules["thonny"].__file__)
         with open(os.path.join(package_dir, "VERSION"), encoding="ASCII") as fp:
-            return fp.read().strip()
+            _THONNY_VERSION = fp.read().strip()
+            return _THONNY_VERSION
     except Exception:
         return "0.0.0"
 
@@ -246,19 +253,11 @@ def launch():
         from thonny import workbench
 
         bench = workbench.Workbench()
-        try:
-            bench.mainloop()
-        except SystemExit:
-            bench.destroy()
+        bench.mainloop()
         return 0
 
-    except SystemExit as e:
-        from tkinter import _default_root, messagebox
-
-        messagebox.showerror("System exit", str(e), master=_default_root)
-        return -1
-
     except Exception:
+        import tkinter as tk
         import traceback
         from logging import exception
 
@@ -266,7 +265,7 @@ def launch():
         from thonny import ui_utils
 
         dlg = ui_utils.LongTextDialog("Internal error", traceback.format_exc())
-        ui_utils.show_dialog(dlg, get_workbench())
+        ui_utils.show_dialog(dlg, tk._default_root)
         return -1
     finally:
         runner = get_runner()

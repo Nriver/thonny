@@ -79,6 +79,7 @@ ANSI_COLOR_NAMES = {
 
 class ShellView(tk.PanedWindow):
     def __init__(self, master):
+        self._osc_title = None
         super().__init__(
             master,
             orient="horizontal",
@@ -129,6 +130,7 @@ class ShellView(tk.PanedWindow):
         get_workbench().event_generate("ShellTextCreated", text_widget=self.text)
         get_workbench().bind("TextInsert", self.text_inserted, True)
         get_workbench().bind("TextDelete", self.text_deleted, True)
+        get_workbench().bind("OscEvent", self.handle_osc_event, True)
 
         self.text.grid(row=1, column=1, sticky=tk.NSEW)
         self.vert_scrollbar["command"] = self.text.yview
@@ -140,7 +142,18 @@ class ShellView(tk.PanedWindow):
         self.init_plotter()
         self.menu = ShellMenu(self.text, self)
 
-    def set_title(self, text: str) -> None:
+    def handle_osc_event(self, msg):
+        self.text._handle_osc_sequence(msg.text)
+
+    def get_tab_text(self) -> str:
+        result = tr("Shell")
+        if self._osc_title:
+            result += " • " + replace_unsupported_chars(self._osc_title)
+        return result
+
+    def set_osc_title(self, text: str) -> None:
+        self._osc_title = text
+
         if not hasattr(self, "home_widget"):
             logger.warning("No home widget")
             return
@@ -148,11 +161,13 @@ class ShellView(tk.PanedWindow):
         container = cast(ttk.Frame, getattr(self, "home_widget"))
         notebook = cast(ttk.Notebook, container.master)
 
-        title = tr("Shell")
-        if text:
-            title += " • " + replace_unsupported_chars(text)
-
-        notebook.tab(container, text=title)
+        # Should update tab text only if the tab is present
+        for tab in notebook.winfo_children():
+            try:
+                if container == tab:
+                    notebook.tab(container, text=self.get_tab_text())
+            except TclError:
+                logger.exception("Could not update tab title")
 
     def init_plotter(self):
         self.plotter = None
@@ -732,7 +747,7 @@ class BaseShellText(EnhancedTextWithLogging, SyntaxText):
 
         # https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences#window-title
         if inner[:2] in ["0;", "2;"]:
-            get_shell().set_title(inner[2:])
+            get_shell().set_osc_title(inner[2:])
         else:
             logger.warning("Unsupported OSC sequence %r", data)
 
@@ -942,7 +957,7 @@ class BaseShellText(EnhancedTextWithLogging, SyntaxText):
             )
 
         self.see("end")
-        get_shell().set_title("")
+        get_shell().set_osc_title("")
 
     def intercept_insert(self, index, chars, tags=None, **kw):
         if tags is None:
@@ -1266,7 +1281,7 @@ class BaseShellText(EnhancedTextWithLogging, SyntaxText):
                         "shell.clear_for_new_process"
                     ):
                         self._clear_shell()
-                        get_shell().set_title("")
+                        get_shell().set_osc_title("")
 
                     get_workbench().event_generate("MagicCommand", cmd_line=text_to_be_submitted)
                     get_runner().send_command(
@@ -1411,7 +1426,7 @@ class BaseShellText(EnhancedTextWithLogging, SyntaxText):
         # make sure dead values are not clickable anymore
         self._invalidate_current_data()
         self.set_read_only(True)
-        get_shell().set_title("")
+        get_shell().set_osc_title("")
 
     def compute_smart_home_destination_index(self):
         """Is used by EnhancedText"""

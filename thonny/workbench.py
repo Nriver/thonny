@@ -227,6 +227,14 @@ class Workbench(tk.Tk):
         self.ready = True
         self.event_generate("WorkbenchReady")
         self._editor_notebook.update_appearance()
+        if self._configuration_manager.error_reading_existing_file:
+            messagebox.showerror(
+                "Problem",
+                f"Previous configuration could not be read:\n\n"
+                f"{self._configuration_manager.error_reading_existing_file}).\n\n"
+                "Using default settings",
+                master=self,
+            )
 
     def _make_sanity_checks(self):
         home_dir = os.path.expanduser("~")
@@ -812,6 +820,11 @@ class Workbench(tk.Tk):
         self._backend_button.configure(command=self._post_backend_menu)
 
     def _post_backend_menu(self):
+        from thonny.plugins.micropython.uf2dialog import (
+            show_uf2_installer,
+            uf2_device_is_present_in_bootloader_mode,
+        )
+
         menu_font = tk_font.nametofont("TkMenuFont")
 
         def choose_backend():
@@ -848,6 +861,18 @@ class Workbench(tk.Tk):
         # self._backend_conf_variable.set(value=self.get_option("run.backend_name"))
 
         self._backend_menu.add_separator()
+
+        if uf2_device_is_present_in_bootloader_mode():
+            self._backend_menu.add_command(
+                label=tr("Install MicroPython") + "...",
+                command=lambda: show_uf2_installer(self, "MicroPython"),
+            )
+            self._backend_menu.add_command(
+                label=tr("Install CircuitPython") + "...",
+                command=lambda: show_uf2_installer(self, "CircuitPython"),
+            )
+            self._backend_menu.add_separator()
+
         self._backend_menu.add_command(
             label=tr("Configure interpreter..."),
             command=lambda: self.show_options("interpreter"),
@@ -1698,9 +1723,12 @@ class Workbench(tk.Tk):
             return False
 
         if view.hidden:  # type: ignore
-            notebook.insert(
-                "auto", view.home_widget, text=self._view_records[view_id]["label"]  # type: ignore
-            )
+            label = None
+            if hasattr(view, "get_tab_text"):
+                label = view.get_tab_text()
+            if not label:
+                label = self._view_records[view_id]["label"]
+            notebook.insert("auto", view.home_widget, text=label)  # type: ignore
             view.hidden = False  # type: ignore
             if hasattr(view, "on_show"):  # type: ignore
                 view.on_show()
@@ -2341,7 +2369,7 @@ class Workbench(tk.Tk):
             self._closing = True
 
             runner = get_runner()
-            if runner != None:
+            if runner is not None:
                 runner.destroy_backend()
 
             # Tk clipboard gets cleared on exit and won't end up in system clipboard
@@ -2354,7 +2382,7 @@ class Workbench(tk.Tk):
                 ):
                     # Looks like the clipboard contains file name(s)
                     # Most likely this means actual file cut/copy operation
-                    # was made outside of Thonny.
+                    # was made outside Thonny.
                     # Don't want to replace this with simple string data of file names.
                     pass
                 else:
@@ -2387,6 +2415,8 @@ class Workbench(tk.Tk):
         sys.last_traceback = tb
         if isinstance(val, KeyboardInterrupt):
             # no need to report this, just let it close
+            logger.info("Got KeyboardInterrupt, closing")
+            self._on_close()
             return
         self.report_exception()
 

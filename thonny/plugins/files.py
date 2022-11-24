@@ -3,6 +3,7 @@
 import os
 import pathlib
 import tkinter as tk
+from logging import getLogger
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from tkinter import messagebox
 from tkinter.messagebox import askokcancel, showerror
@@ -26,6 +27,8 @@ from thonny.languages import tr
 from thonny.misc_utils import running_on_mac_os, running_on_windows, sizeof_fmt
 from thonny.running import InlineCommandDialog, construct_cd_command
 from thonny.ui_utils import lookup_style_option
+
+logger = getLogger(__name__)
 
 minsize = 80
 
@@ -215,9 +218,54 @@ class ActiveLocalFileBrowser(BaseLocalFileBrowser):
 
         self.menu.add_command(label=tr("Upload to %s") % target_dir_desc, command=_upload)
 
+    def add_first_menu_items(self, context):
+        if self.check_for_venv():
+            self.menu.add_command(
+                label=tr("Activate virtual environment"), command=lambda: self.do_activate_venv()
+            )
+            self.menu.add_separator()
+
+        super().add_first_menu_items(context)
+
     def add_middle_menu_items(self, context):
         self.check_add_upload_command()
         super().add_middle_menu_items(context)
+
+    def _get_venv_path(self):
+        CFGFILE = "pyvenv.cfg"
+        path = self.get_selected_path()
+        fnam = self.get_selected_name()
+        try:
+            if os.path.exists(path):
+                if os.path.isdir(path):
+                    cfgfile = os.path.join(path, CFGFILE)
+                    if os.path.exists(cfgfile) and os.path.isfile(cfgfile):
+                        return path
+                else:
+                    if fnam == CFGFILE:
+                        return os.path.dirname(path)
+        except Exception as ex:
+            logger.error("_get_venv_path", ex)
+
+    def check_for_venv(self):
+        return self._get_venv_path() is not None
+
+    def do_activate_venv(self):
+        venv_path = self._get_venv_path()
+
+        if running_on_windows():
+            backend_python = os.path.join(venv_path, "Scripts", "python.exe")
+        else:
+            backend_python = os.path.join(venv_path, "bin", "python3")
+
+        if os.path.isfile(backend_python):
+            get_workbench().set_option("run.backend_name", "LocalCPython")
+            get_workbench().set_option("LocalCPython.executable", backend_python)
+
+            # just like pressing the button
+            get_runner().cmd_stop_restart()
+        else:
+            messagebox.showerror("Error", f"Could not find {backend_python!r}", master=self)
 
 
 class ActiveRemoteFileBrowser(BaseRemoteFileBrowser):
@@ -227,6 +275,9 @@ class ActiveRemoteFileBrowser(BaseRemoteFileBrowser):
         get_workbench().bind("RemoteFilesChanged", self.on_remote_files_changed, True)
 
     def is_active_browser(self):
+        return True
+
+    def supports_new_file(self):
         return True
 
     def on_toplevel_response(self, msg):
@@ -495,7 +546,7 @@ def format_items(items):
         return items[0]
     msg = "• " + "\n• ".join(items[:max_count])
     if len(items) > max_count:
-        msg += "\n ... %d more ..."
+        msg += "\n ... %d more ..." % (len(items) - max_count)
 
     return msg
 
@@ -557,7 +608,21 @@ def load_plugin() -> None:
 
     get_workbench().add_view(FilesView, tr("Files"), "nw")
 
-    for ext in [".py", ".pyw", ".pyi", ".txt", ".log", ".json", ".yml", ".yaml", ".md", ".rst"]:
+    for ext in [
+        ".py",
+        ".pyw",
+        ".pyi",
+        ".txt",
+        ".log",
+        ".json",
+        ".yml",
+        ".yaml",
+        ".md",
+        ".rst",
+        ".toml",
+        ".gitignore",
+        ".env",
+    ]:
         get_workbench().set_default(get_file_handler_conf_key(ext), "thonny")
 
 
